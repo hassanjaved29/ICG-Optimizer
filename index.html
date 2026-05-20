@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Intermediate Code Generator & Optimizer</title>
+<style>
+:root[data-theme="dark"] {
+  --bg:        #101010;
+  --bg2:       #000000;
+  --bg3:       #1f1f1f;
+  --border:    #2a2a2a;
+  --text:      #ffffff;
+  --text-muted:#b8b8b8;
+  --text-dim:  #ababab;
+  --pipe-bg:   #ffffff;
+  --pipe-text: #000000;
+  --pipe-act-bg:#00ff37;
+  --pipe-act-text:#000000;
+  --pipe-act-border:#00ff37;
+  --pipe-sn-act:#12d43c;
+  --ta-bg:     #1f1f1f;
+  --ta-border: #1f1f1f;
+  --note-bg:   #1f1f1f;
+  --note-border:#ffffff;
+  --run-bg:    #f2f2f0;
+  --run-text:  #111;
+  --run-hover-bg:#1f1f1f;
+  --run-hover-text:#ffffff;
+  --ex-border: #ffffff;
+  --ex-text:   #ffffff;
+  --ex-hover-bg:#484848;
+  --ex-hover-text:#ffffff;
+  --metric-bg: #1f1f1f;
+  --metric-text:#ffffff;
+  --metric-sub:#dddddd;
+  --code-text: #ffffff;
+  --prop-text: #438ad1;
+  --final-text:#00e165;
+}
+
+:root[data-theme="light"] {
+  --bg:        #f5f5f3;
+  --bg2:       #ffffff;
+  --bg3:       #fafaf9;
+  --border:    #e8e8e6;
+  --text:      #1a1a1a;
+  --text-muted:#666;
+  --text-dim:  #888;
+  --pipe-bg:   #ffffff;
+  --pipe-text: #888;
+  --pipe-act-bg:#eeedfe;
+  --pipe-act-text:#3c3489;
+  --pipe-act-border:#afa9ec;
+  --pipe-sn-act:#afa9ec;
+  --ta-bg:     #fafaf9;
+  --ta-border: #ddd;
+  --note-bg:   #fafaf9;
+  --note-border:#e0e0de;
+  --run-bg:    #f2f2f0;
+  --run-text:  #111;
+  --run-hover-bg:#e8e8e6;
+  --run-hover-text:#111;
+  --ex-border: #e0e0de;
+  --ex-text:   #666;
+  --ex-hover-bg:#f5f5f3;
+  --ex-hover-text:#111;
+  --metric-bg: #f5f5f3;
+  --metric-text:#111;
+  --metric-sub:#aaa;
+  --code-text: #111;
+  --prop-text: #185fa5;
+  --final-text:#27500a;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);padding:2rem 1rem;transition:background .25s,color .25s}
+.app{max-width:1200px;margin:0 auto}
+
+.header-row{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1.5rem;gap:1rem}
+.project-title{font-size:36px;font-weight:600;color:var(--text);margin-bottom:3px}
+.project-sub{font-size:13px;color:var(--text-muted)}
+
+.theme-toggle{flex-shrink:0;margin-top:8px;display:flex;align-items:center;gap:7px;padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;font-size:12px;font-weight:500;color:var(--text-muted);transition:all .2s;white-space:nowrap}
+.theme-toggle:hover{color:var(--text);border-color:var(--text)}
+.tog-icon{font-size:14px;line-height:1;transition:transform .4s}
+[data-theme="light"] .tog-icon{transform:rotate(180deg)}
+
+.pipeline{display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-bottom:1.5rem}
+.pipe-node{display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:20px;font-size:14px;font-weight:500;border:1px solid var(--pipe-text);background:var(--pipe-bg);color:var(--pipe-text);transition:all .2s}
+.pipe-node.active{background:var(--pipe-act-bg);color:var(--pipe-act-text);border-color:var(--pipe-act-border)}
+.sn{width:16px;height:16px;border-radius:50%;background:#c4c4c4;display:inline-flex;align-items:center;justify-content:center;font-size:10px}
+.pipe-node.active .sn{background:var(--pipe-sn-act);color:var(--pipe-act-text)}
+.pipe-arr{color:#bbb;font-size:12px}
+
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:1rem 1.25rem;margin-bottom:1rem;transition:background .25s,border-color .25s}
+.results-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem}
+.results-grid .card{margin-bottom:0}
+.card-full{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:1rem 1.25rem;margin-bottom:1rem;transition:background .25s,border-color .25s}
+
+.card-title{font-size:13px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px;margin-bottom:.75rem;flex-wrap:wrap}
+.badge{font-size:11px;padding:2px 9px;border-radius:12px;font-weight:500}
+.b1{background:#e1f5ee;color:#03362c}
+.b2{background:#eeedfe;color:#0c0263}
+.b3{background:#e6f1fb;color:#03305c}
+.b4{background:#faeeda;color:#633806}
+.b5{background:#e1f5ee;color:#01392b}
+.b6{background:#eaf3de;color:#27500a}
+
+textarea{width:100%;min-height:105px;font-family:monospace;font-size:13px;resize:vertical;border:1px solid var(--ta-border);border-radius:8px;padding:10px 12px;background:var(--ta-bg);color:var(--text);line-height:1.6;transition:background .25s,color .25s,border-color .25s}
+textarea:focus{outline:none;border-color:#aaa}
+
+.btn-row{display:flex;gap:8px;margin-top:.75rem;flex-wrap:wrap}
+button.run{padding:7px 18px;font-size:13px;font-weight:500;cursor:pointer;border:1px solid #ccc;border-radius:8px;background:var(--run-bg);color:var(--run-text);display:inline-flex;align-items:center;gap:6px;transition:background .2s,color .2s}
+button.run:hover{background:var(--run-hover-bg);color:var(--run-hover-text)}
+button.run:active{transform:scale(.98)}
+button.ex{padding:5px 13px;font-size:12px;cursor:pointer;border:1px solid var(--ex-border);border-radius:8px;background:transparent;color:var(--ex-text);transition:all .2s}
+button.ex:hover{background:var(--ex-hover-bg);color:var(--ex-hover-text)}
+
+.code-out{font-family:monospace;font-size:13px;line-height:1.9}
+.cl{display:block;color:var(--code-text)}
+.cl-prop{color:var(--prop-text);font-weight:500}
+.cl-elim{text-decoration:line-through;color:#c0392b}
+.cl-final{color:var(--final-text);font-weight:500}
+.pill{display:inline-block;font-size:11px;padding:1px 7px;border-radius:10px;margin-left:8px;font-family:system-ui,sans-serif;font-weight:500}
+.pill-cp{background:#e6f1fb;color:#0c447c}
+.pill-elim{background:#fcebeb;color:#c0392b}
+.err{font-size:13px;color:#c0392b;margin-top:.5rem}
+
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-top:1rem}
+.metric{background:var(--metric-bg);border-radius:8px;padding:.75rem 1rem;transition:background .25s}
+.metric-label{font-size:11px;color:var(--text-muted);margin-bottom:4px}
+.metric-val{font-size:22px;font-weight:600;color:var(--metric-text)}
+.metric-sub{font-size:11px;color:var(--metric-sub);margin-top:2px}
+
+.hidden{display:none}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:.65rem}
+.leg-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text)}
+.leg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.section-note{font-size:12px;color:var(--text-dim);margin-bottom:1rem;line-height:1.5;padding:8px 12px;background:var(--note-bg);border-left:4px solid var(--note-border);border-radius:0 12px 12px 0;transition:background .25s,border-color .25s}
+
+.card-title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem;gap:8px;flex-wrap:wrap}
+.card-title-row .card-title{margin-bottom:0}
+button.copy-btn{padding:5px 13px;font-size:12px;cursor:pointer;border:1px solid #c3e6cb;border-radius:8px;background:#eaf3de;color:#1a5c23;font-weight:500;display:inline-flex;align-items:center;gap:5px;transition:all .2s;white-space:nowrap}
+button.copy-btn:hover{background:#009628;color:#fff;border-color:#00b831}
+button.copy-btn.copied{background:#009628;color:#fff;border-color:#00b831}
+
+@media(max-width:700px){
+  .results-grid{grid-template-columns:1fr}
+  .project-title{font-size:24px}
+  .header-row{flex-direction:column}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="header-row">
+    <div class="header">
+      <div class="project-title">Intermediate Code Generation &amp; Optimization</div>
+      <div class="project-sub">Infix &rarr; Postfix &rarr; 3AC &rarr; Copy Propagation &rarr; Common Subexpression Elimination</div>
+    </div>
+    <button class="theme-toggle" onclick="toggleTheme()">
+      <span class="tog-icon">☀️</span>
+      <span id="themeLabel">Light Mode</span>
+    </button>
+  </div>
+
+  <div class="pipeline" id="pipe">
+    <div class="pipe-node active" id="pn0"><span class="sn">1</span>&nbsp;Input</div>
+    <span class="pipe-arr">&rarr;</span>
+    <div class="pipe-node" id="pn1"><span class="sn">2</span>&nbsp;Postfix</div>
+    <span class="pipe-arr">&rarr;</span>
+    <div class="pipe-node" id="pn2"><span class="sn">3</span>&nbsp;3AC</div>
+    <span class="pipe-arr">&rarr;</span>
+    <div class="pipe-node" id="pn3"><span class="sn">4</span>&nbsp;Copy Prop.</div>
+    <span class="pipe-arr">&rarr;</span>
+    <div class="pipe-node" id="pn4"><span class="sn">5</span>&nbsp;CSE</div>
+    <span class="pipe-arr">&rarr;</span>
+    <div class="pipe-node" id="pn5"><span class="sn">6</span>&nbsp;Output</div>
+  </div>
+
+  <!-- Stage 1 -->
+  <div class="card">
+    <div class="card-title">1 &mdash; Input Expression <span class="badge b1">Stage 1</span></div>
+    <p class="section-note">Enter arithmetic assignments in infix notation, one per line.</p>
+    <textarea id="inp" spellcheck="false">a = 2 + 3
+b = a
+c = 2 + 3
+d = b + 1</textarea>
+    <div class="btn-row">
+      <button class="run" onclick="run()">&#9654; Compile</button>
+      <button class="ex" onclick="load(0)">Example 1</button>
+      <button class="ex" onclick="load(1)">Example 2</button>
+      <button class="ex" onclick="load(2)">Example 3</button>
+    </div>
+    <div id="err" class="err"></div>
+  </div>
+
+  <div id="results" class="hidden">
+
+    <!-- Stages 2 & 3 -->
+    <div class="results-grid">
+      <div class="card">
+        <div class="card-title">2 &mdash; Postfix Conversion <span class="badge b2">Stage 2</span></div>
+        <p class="section-note">Each RHS is converted to postfix (Reverse Polish Notation) using a stack. Operators are placed after their operands, removing the need for parentheses or precedence rules at later stages.</p>
+        <div class="code-out" id="out-pf"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">3 &mdash; Three-Address Code (TAC) <span class="badge b3">Stage 3</span></div>
+        <p class="section-note">Each operation is broken into instructions with at most two operands and one result. Temporary variables (t1, t2, ...) hold intermediate values.</p>
+        <div class="code-out" id="out-tac"></div>
+      </div>
+    </div>
+
+    <!-- Stages 4 & 5 -->
+    <div class="results-grid">
+      <div class="card">
+        <div class="card-title">4 &mdash; Copy Propagation <span class="badge b4">Stage 4</span></div>
+        <p class="section-note">When a variable is assigned a copy of another (e.g. b = a), later uses of that variable are replaced directly with the original. Redundant copy instructions are then removed.</p>
+        <div class="code-out" id="out-cp"></div>
+        <div class="legend">
+          <div class="leg-item"><div class="leg-dot" style="background:#438ad1"></div> value propagated forward</div>
+          <div class="leg-item"><div class="leg-dot" style="background:#c0392b"></div> copy instruction removed</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">5 &mdash; Common Subexpression Elimination (CSE) <span class="badge b5">Stage 5</span></div>
+        <p class="section-note">If the same expression is computed more than once and its operands haven't changed, the second computation is replaced with the result of the first.</p>
+        <div class="code-out" id="out-cse"></div>
+        <div class="legend">
+          <div class="leg-item"><div class="leg-dot" style="background:#0f6e56"></div> first occurrence kept</div>
+          <div class="leg-item"><div class="leg-dot" style="background:#c0392b"></div> duplicate eliminated, reuses earlier result</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stage 6 -->
+    <div class="card-full">
+      <div class="card-title-row">
+        <div class="card-title">6 &mdash; Final Optimized Code <span class="badge b6">Stage 6</span></div>
+        <button class="copy-btn" id="copyBtn" onclick="copyFinal()">&#10697; Copy Code</button>
+      </div>
+      <p class="section-note">The final intermediate code after all optimizations have been applied.</p>
+      <div class="code-out" id="out-final"></div>
+      <div class="metrics" id="metrics"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const EX=[
+  "a = 2 + 3\nb = a\nc = 2 + 3\nd = b + 1",
+  "x = a + b\ny = x\nz = a + b\nw = y * 2",
+  "p = 4 * 5\nq = p\nr = 4 * 5\ns = q + r"
+];
+
+let finalCode = '';
+
+function toggleTheme(){
+  const html = document.documentElement;
+  const isDark = html.getAttribute('data-theme') === 'dark';
+  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  document.getElementById('themeLabel').textContent = isDark ? 'Dark Mode' : 'Light Mode';
+  document.querySelector('.tog-icon').textContent = isDark ? '🌙' : '☀️';
+}
+
+function load(i){
+  document.getElementById('inp').value=EX[i];
+  document.getElementById('results').className='hidden';
+  document.getElementById('err').textContent='';
+  setPipe(-1);
+}
+
+function setPipe(upto){
+  for(let i=0;i<6;i++)
+    document.getElementById('pn'+i).classList.toggle('active', upto===-1?i===0:i<=upto);
+}
+
+function isOp(c){return'+-*/'.includes(c)}
+function prec(c){return(c==='*'||c==='/')?2:1}
+
+function tokenize(s){
+  const t=[];let i=0;
+  while(i<s.length){
+    if(s[i]===' '){i++;continue}
+    if(s[i]==='('||s[i]===')'){t.push(s[i++]);continue}
+    if(isOp(s[i])){
+      const prev=t[t.length-1];
+      if(!prev||prev==='('||isOp(prev)){
+        let w='';while(i<s.length&&/[\w.]/.test(s[i]))w+=s[i++];
+        if(w)t.push(w);else t.push(s[i++]);
+      } else t.push(s[i++]);
+      continue;
+    }
+    let w='';while(i<s.length&&/[\w.]/.test(s[i]))w+=s[i++];
+    if(w)t.push(w);
+  }
+  return t;
+}
+
+function toPostfix(tok){
+  const out=[],stk=[];
+  for(const t of tok){
+    if(t==='(')stk.push(t);
+    else if(t===')'){while(stk.length&&stk[stk.length-1]!=='(')out.push(stk.pop());stk.pop();}
+    else if(isOp(t)){while(stk.length&&isOp(stk[stk.length-1])&&prec(stk[stk.length-1])>=prec(t))out.push(stk.pop());stk.push(t);}
+    else out.push(t);
+  }
+  while(stk.length)out.push(stk.pop());
+  return out;
+}
+
+function genTAC(pf,target,tc){
+  const stk=[],ins=[];
+  for(const t of pf){
+    if(isOp(t)){
+      const b=stk.pop(),a=stk.pop(),tmp='t'+tc++;
+      ins.push({result:tmp,op:t,left:a,right:b,isTmp:true});
+      stk.push(tmp);
+    } else stk.push(t);
+  }
+  const last=stk.pop()||'0';
+  if(last!==target)ins.push({result:target,op:'=',left:last,right:null,isTmp:false});
+  return{ins,tc};
+}
+
+function fmt(i){return i.op==='='?`${i.result} = ${i.left}`:`${i.result} = ${i.left} ${i.op} ${i.right}`}
+
+function copyProp(ins){
+  const copyMap={};
+  const out=[];
+  for(const i of ins){
+    const l=copyMap[i.left]!==undefined?copyMap[i.left]:i.left;
+    const r=i.right?(copyMap[i.right]!==undefined?copyMap[i.right]:i.right):null;
+    const changed=(l!==i.left)||(r!==i.right);
+    if(i.op==='='&&!i.isTmp){
+      copyMap[i.result]=l;
+      out.push({...i,left:l,right:r,isCopy:true,origLeft:i.left,propagated:changed});
+    } else {
+      for(const k of Object.keys(copyMap)){if(copyMap[k]===i.result)delete copyMap[k];}
+      out.push({...i,left:l,right:r,propagated:changed,origLeft:i.left,origRight:i.right});
+    }
+  }
+  const usedAfter=new Set();
+  for(const i of out){if(!i.isCopy){if(i.left)usedAfter.add(i.left);if(i.right)usedAfter.add(i.right);}}
+  return out.map(i=>({...i,removedCopy:i.isCopy&&!usedAfter.has(i.result)}));
+}
+
+function cse(ins){
+  const exprMap={};
+  const out=[];
+  for(const i of ins){
+    if(i.op!=='='&&i.right!==null){
+      const key=`${i.left}${i.op}${i.right}`;
+      const keyR=`${i.right}${i.op}${i.left}`;
+      const comm=i.op==='+'||i.op==='*';
+      const existing=exprMap[key]||(comm?exprMap[keyR]:undefined);
+      if(existing){
+        out.push({...i,cseReuse:true,reuseFrom:existing});
+      } else {
+        exprMap[key]=i.result;
+        out.push({...i,cseReuse:false});
+      }
+    } else {
+      out.push({...i,cseReuse:false});
+    }
+  }
+  return out;
+}
+
+function copyFinal(){
+  if(!finalCode) return;
+  navigator.clipboard.writeText(finalCode).then(()=>{
+    const btn=document.getElementById('copyBtn');
+    btn.textContent='✓ Copied!';btn.classList.add('copied');
+    setTimeout(()=>{btn.innerHTML='&#10697; Copy Code';btn.classList.remove('copied');},2000);
+  }).catch(()=>{
+    const ta=document.createElement('textarea');
+    ta.value=finalCode;document.body.appendChild(ta);ta.select();
+    document.execCommand('copy');document.body.removeChild(ta);
+    const btn=document.getElementById('copyBtn');
+    btn.textContent='✓ Copied!';btn.classList.add('copied');
+    setTimeout(()=>{btn.innerHTML='&#10697; Copy Code';btn.classList.remove('copied');},2000);
+  });
+}
+
+function run(){
+  const raw=document.getElementById('inp').value;
+  const errEl=document.getElementById('err');
+  errEl.textContent='';
+  const lines=raw.split('\n').map(l=>l.trim()).filter(l=>l);
+  if(!lines.length){errEl.textContent='Enter at least one expression.';return;}
+
+  const pfLines=[];let allTAC=[];let tc=1;
+
+  for(const line of lines){
+    const eq=line.indexOf('=');
+    if(eq<0){errEl.textContent=`Cannot parse: "${line}"`;return;}
+    const lhs=line.slice(0,eq).trim();
+    const rhs=line.slice(eq+1).trim();
+    if(!lhs||!rhs){errEl.textContent=`Invalid line: "${line}"`;return;}
+    const tok=tokenize(rhs);
+    const pf=toPostfix(tok);
+    pfLines.push({lhs,pf:pf.join(' ')});
+    const g=genTAC(pf,lhs,tc);
+    tc=g.tc;
+    allTAC=allTAC.concat(g.ins);
+  }
+
+  document.getElementById('out-pf').innerHTML=
+    pfLines.map(p=>`<span class="cl"><span style="font-size:12px;color:#bbb">${p.lhs} &rarr;&nbsp;&nbsp;</span>${p.pf}</span>`).join('');
+
+  document.getElementById('out-tac').innerHTML=
+    allTAC.map(i=>`<span class="cl">${fmt(i)}</span>`).join('');
+
+  const cpResult=copyProp(allTAC);
+  document.getElementById('out-cp').innerHTML=cpResult.map(i=>{
+    if(i.removedCopy){
+      const origStr=`${i.result} = ${i.origLeft}`;
+      return`<span class="cl cl-elim">${origStr}<span class="pill pill-elim">copy removed</span></span>`;
+    }
+    if(i.propagated){
+      const origStr=i.origRight
+        ?`${i.result} = ${i.origLeft} ${i.op} ${i.origRight}`
+        :`${i.result} = ${i.origLeft}`;
+      return`<span class="cl cl-prop">${origStr}&nbsp;<span style="color:#bbb;font-size:11px">&rarr;</span>&nbsp;${fmt(i)}<span class="pill pill-cp">propagated</span></span>`;
+    }
+    return`<span class="cl">${fmt(i)}</span>`;
+  }).join('');
+
+  const afterCP=cpResult.filter(i=>!i.removedCopy);
+  const cseResult=cse(afterCP);
+
+  document.getElementById('out-cse').innerHTML=cseResult.map(i=>{
+    if(i.cseReuse){
+      return`<span class="cl cl-elim">${fmt(i)}<span class="pill pill-elim">duplicate &rarr; reuse ${i.reuseFrom}</span></span>`;
+    }
+    return`<span class="cl">${fmt(i)}</span>`;
+  }).join('');
+
+  const reuseMap={};
+  for(const i of cseResult)if(i.cseReuse)reuseMap[i.result]=i.reuseFrom;
+  const finalInstrs=cseResult
+    .filter(i=>!i.cseReuse)
+    .map(i=>({...i,left:reuseMap[i.left]||i.left,right:i.right?(reuseMap[i.right]||i.right):null}));
+
+  document.getElementById('out-final').innerHTML=
+    finalInstrs.map(i=>`<span class="cl cl-final">${fmt(i)}</span>`).join('');
+
+  finalCode=finalInstrs.map(i=>fmt(i)).join('\n');
+
+  const cpCount=cpResult.filter(i=>i.propagated&&!i.removedCopy).length;
+  const cpRemoved=cpResult.filter(i=>i.removedCopy).length;
+  const cseRemoved=cseResult.filter(i=>i.cseReuse).length;
+
+  document.getElementById('metrics').innerHTML=`
+    <div class="metric"><div class="metric-label">TAC instructions</div><div class="metric-val">${allTAC.length}</div><div class="metric-sub">before optimization</div></div>
+    <div class="metric"><div class="metric-label">Values propagated</div><div class="metric-val">${cpCount}</div><div class="metric-sub">copy propagation</div></div>
+    <div class="metric"><div class="metric-label">Copies removed</div><div class="metric-val">${cpRemoved}</div><div class="metric-sub">redundant assignments</div></div>
+    <div class="metric"><div class="metric-label">CSE eliminated</div><div class="metric-val">${cseRemoved}</div><div class="metric-sub">duplicate subexpressions</div></div>
+    <div class="metric"><div class="metric-label">Final instructions</div><div class="metric-val">${finalInstrs.length}</div><div class="metric-sub">optimized output</div></div>
+  `;
+
+  document.getElementById('results').className='';
+  setPipe(5);
+}
+
+run();
+</script>
+</body>
+</html>
